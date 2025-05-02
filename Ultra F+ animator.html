@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Simple HTML Animator</title>
+  <style>
+    /* Basic reset and layout */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* Toolbar styling */
+    #toolbar {
+      margin-bottom: 10px;
+    }
+
+    #toolbar button,
+    #toolbar input {
+      margin-right: 5px;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    /* Canvas container styling */
+    #canvas-container {
+      position: relative;
+      border: 2px solid #ccc;
+      background: white;
+    }
+
+    #drawingCanvas {
+      border: 1px solid #aaa;
+    }
+
+    /* Timeline styling */
+    #timeline {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .frame-thumbnail {
+      width: 60px;
+      height: 45px;
+      border: 1px solid #aaa;
+      margin-right: 5px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .frame-thumbnail.selected {
+      border: 2px solid #007BFF;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toolbar for frame controls and options -->
+  <div id="toolbar">
+    <button onclick="addFrame()">Add Frame</button>
+    <button onclick="deleteFrame()">Delete Frame</button>
+    <button onclick="prevFrame()">Prev Frame</button>
+    <button onclick="nextFrame()">Next Frame</button>
+    <button onclick="clearCanvas()">Clear Canvas</button>
+    <label>
+      <input type="checkbox" id="onionSkinToggle"> Onion Skin
+    </label>
+    <button onclick="playAnimation()">Play Animation</button>
+  </div>
+
+  <!-- Canvas area for drawing -->
+  <div id="canvas-container">
+    <canvas id="drawingCanvas" width="800" height="600"></canvas>
+  </div>
+
+  <!-- Timeline display for frames -->
+  <div id="timeline"></div>
+
+  <script>
+    // Global variables and initialization
+    const drawingCanvas = document.getElementById("drawingCanvas");
+    const ctx = drawingCanvas.getContext("2d");
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    let frames = [];             // Array to store frames (each as a canvas element)
+    let currentFrameIndex = 0;   // Current frame the user is editing
+    let animationInterval = null;
+
+    // Create a blank frame (filled with white) when starting a new frame
+    function initFrame() {
+      const blankFrame = document.createElement("canvas");
+      blankFrame.width = drawingCanvas.width;
+      blankFrame.height = drawingCanvas.height;
+      const blankCtx = blankFrame.getContext("2d");
+      blankCtx.fillStyle = "white";
+      blankCtx.fillRect(0, 0, blankFrame.width, blankFrame.height);
+      return blankFrame;
+    }
+
+    // Load and render the frame at the given index onto the main canvas.
+    // If onion skin is enabled, the previous frame will show faintly in the background.
+    function loadFrame(index) {
+      if (index < 0 || index >= frames.length) return;
+      const img = new Image();
+      img.onload = function() {
+        ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+
+        // Draw previous frame with reduced opacity for onion skin effect if enabled.
+        if (document.getElementById("onionSkinToggle").checked && index > 0) {
+          const prevFrameData = frames[index - 1].toDataURL();
+          const prevImg = new Image();
+          prevImg.onload = function() {
+            ctx.globalAlpha = 0.3;
+            ctx.drawImage(prevImg, 0, 0);
+            ctx.globalAlpha = 1.0;
+            ctx.drawImage(img, 0, 0);
+          }
+          prevImg.src = prevFrameData;
+        } else {
+          ctx.drawImage(img, 0, 0);
+        }
+      }
+      img.src = frames[index].toDataURL();
+      updateTimeline();
+    }
+
+    // Save the current canvas drawing to the current frame.
+    function saveCurrentFrame() {
+      const newFrame = document.createElement("canvas");
+      newFrame.width = drawingCanvas.width;
+      newFrame.height = drawingCanvas.height;
+      newFrame.getContext("2d").drawImage(drawingCanvas, 0, 0);
+      frames[currentFrameIndex] = newFrame;
+      updateTimeline();
+    }
+
+    // Update the timeline view with thumbnails for each frame.
+    function updateTimeline() {
+      const timeline = document.getElementById("timeline");
+      timeline.innerHTML = "";
+      frames.forEach((frame, index) => {
+        const thumb = document.createElement("canvas");
+        thumb.width = 60;
+        thumb.height = 45;
+        thumb.className = "frame-thumbnail" + (index === currentFrameIndex ? " selected" : "");
+        thumb.getContext("2d").drawImage(frame, 0, 0, thumb.width, thumb.height);
+        thumb.addEventListener("click", function() {
+          // Save current changes before switching frames
+          saveCurrentFrame();
+          currentFrameIndex = index;
+          loadFrame(currentFrameIndex);
+        });
+        timeline.appendChild(thumb);
+      });
+    }
+
+    // Add a new frame immediately following the current frame.
+    function addFrame() {
+      saveCurrentFrame();
+      const newFrame = initFrame();
+      frames.splice(currentFrameIndex + 1, 0, newFrame);
+      currentFrameIndex++;
+      loadFrame(currentFrameIndex);
+    }
+
+    // Delete the current frame (ensuring that at least one frame remains).
+    function deleteFrame() {
+      if (frames.length <= 1) {
+        alert("Cannot delete the last frame!");
+        return;
+      }
+      frames.splice(currentFrameIndex, 1);
+      if (currentFrameIndex >= frames.length) {
+        currentFrameIndex = frames.length - 1;
+      }
+      loadFrame(currentFrameIndex);
+    }
+
+    // Navigate to the previous frame.
+    function prevFrame() {
+      if (currentFrameIndex > 0) {
+        saveCurrentFrame();
+        currentFrameIndex--;
+        loadFrame(currentFrameIndex);
+      }
+    }
+
+    // Navigate to the next frame.
+    function nextFrame() {
+      if (currentFrameIndex < frames.length - 1) {
+        saveCurrentFrame();
+        currentFrameIndex++;
+        loadFrame(currentFrameIndex);
+      }
+    }
+
+    // Clear the canvas (and save the blank state to the current frame).
+    function clearCanvas() {
+      saveCurrentFrame();
+      ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    }
+
+    // Play the sequence of frames as an animation.
+    function playAnimation() {
+      saveCurrentFrame();
+      let currentIndex = 0;
+      if (animationInterval) clearInterval(animationInterval);
+      animationInterval = setInterval(function() {
+        const img = new Image();
+        img.onload = function() {
+          ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+          ctx.drawImage(img, 0, 0);
+        }
+        img.src = frames[currentIndex].toDataURL();
+        currentIndex++;
+        if (currentIndex >= frames.length) currentIndex = 0;
+      }, 200); // 200ms delay between frames
+    }
+
+    // Handle mouse events for drawing on the canvas.
+    drawingCanvas.addEventListener("mousedown", function(e) {
+      isDrawing = true;
+      const rect = drawingCanvas.getBoundingClientRect();
+      lastX = e.clientX - rect.left;
+      lastY = e.clientY - rect.top;
+    });
+
+    drawingCanvas.addEventListener("mousemove", function(e) {
+      if (!isDrawing) return;
+      const rect = drawingCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      lastX = x;
+      lastY = y;
+    });
+
+    drawingCanvas.addEventListener("mouseup", function() {
+      isDrawing = false;
+      saveCurrentFrame();
+    });
+
+    drawingCanvas.addEventListener("mouseout", function() {
+      if (isDrawing) {
+        isDrawing = false;
+        saveCurrentFrame();
+      }
+    });
+
+    // On window load, initialize the animator with a single blank frame.
+    window.onload = function() {
+      frames.push(initFrame());
+      loadFrame(0);
+    }
+  </script>
+</body>
+</html>
