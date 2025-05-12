@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ultra F+ Video Editor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background: #f4f4f4;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    video {
+      width: 100%;
+      max-width: 640px;
+      display: block;
+      margin: 20px auto;
+    }
+    label, input, button {
+      display: block;
+      margin: 10px 0;
+      width: 100%;
+    }
+    input, button {
+      padding: 10px;
+    }
+    button {
+      background: #007ACC;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #888;
+    }
+    #downloadLink {
+      text-align: center;
+      display: block;
+      margin-top: 15px;
+      color: #007ACC;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Ultra F+ Video Editor</h1>
+  
+    <input type="file" id="videoUploader" accept="video/mp4">
+    <video id="videoPlayer" controls style="display: none;"></video>
+  
+    <div>
+      <label for="startTime">Start Time (in seconds):</label>
+      <input type="number" id="startTime" step="any" min="0">
+      
+      <label for="endTime">End Time (in seconds):</label>
+      <input type="number" id="endTime" step="any" min="0">
+      
+      <button id="trimButton">Trim Video</button>
+    </div>
+  
+    <div>
+      <h2>Output Video</h2>
+      <video id="outputVideo" controls style="display: none;"></video>
+      <a id="downloadLink" href="#" download="output.mp4" style="display: none;">Download Trimmed Video</a>
+    </div>
+  </div>
+  
+  <!-- Importing FFmpeg.wasm from the CDN -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.8/dist/ffmpeg.min.js"></script>
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+    
+    const videoUploader = document.getElementById('videoUploader');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const outputVideo = document.getElementById('outputVideo');
+    const downloadLink = document.getElementById('downloadLink');
+    const trimButton = document.getElementById('trimButton');
+    
+    let videoData = null;
+    
+    // When a video is chosen, load it into the player
+    videoUploader.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        videoData = file;
+        const videoURL = URL.createObjectURL(file);
+        videoPlayer.src = videoURL;
+        videoPlayer.style.display = 'block';
+      }
+    });
+    
+    trimButton.addEventListener('click', async () => {
+      const startTime = document.getElementById('startTime').value;
+      const endTime = document.getElementById('endTime').value;
+      
+      if (!videoData) {
+        alert('Please upload a video first!');
+        return;
+      }
+      
+      if (parseFloat(endTime) <= parseFloat(startTime)) {
+        alert('End time must be greater than start time.');
+        return;
+      }
+      
+      trimButton.disabled = true;
+      trimButton.textContent = 'Processing...';
+      
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
+      
+      // Write the video file into FFmpeg's in-memory filesystem
+      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoData));
+      
+      // Run the FFmpeg command to trim the video. The "-ss" flag sets the start time,
+      // "-to" sets the end time, and "-c copy" copies the video stream without re-encoding.
+      await ffmpeg.run('-i', 'input.mp4', '-ss', startTime, '-to', endTime, '-c', 'copy', 'output.mp4');
+      
+      // Read the trimmed file from the FFmpeg virtual filesystem
+      const data = ffmpeg.FS('readFile', 'output.mp4');
+      const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+      const videoUrl = URL.createObjectURL(videoBlob);
+      
+      // Display the trimmed video and set up the download link
+      outputVideo.src = videoUrl;
+      outputVideo.style.display = 'block';
+      downloadLink.href = videoUrl;
+      downloadLink.style.display = 'block';
+      
+      trimButton.disabled = false;
+      trimButton.textContent = 'Trim Video';
+    });
+  </script>
+</body>
+</html>
